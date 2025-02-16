@@ -198,8 +198,29 @@ export class GitService extends BaseService {
   async getFileChanges(params: { staged: boolean }): Promise<FileChange[]> {
     try {
       if (params.staged) {
-        // Keep existing staged files logic
-        return this.getStagedChanges();
+        // Get staged files directly instead of recursing
+        const output = await this.execGit({
+          command: "diff",
+          args: ["--cached", "--numstat"],
+          cwd: this.cwd,
+        });
+
+        const statusOutput = await this.execGit({
+          command: "status",
+          args: ["--porcelain"],
+          cwd: this.cwd,
+        });
+
+        const renamedFiles = parseGitStatus({
+          statusOutput,
+          filterPrefix: "R",
+        });
+
+        return output
+          .split("\n")
+          .filter(Boolean)
+          .flatMap((line) => parseNumstatLine({ line, renamedFiles }))
+          .filter((file) => this.shouldIncludeFile(file.path));
       }
 
       this.logger.debug("Getting unstaged changes compared to remote");

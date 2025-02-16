@@ -17,7 +17,6 @@ const config = {
       },
       moduleNameMapper: {
         "^(\\.{1,2}/.*)\\.js$": "$1",
-        "@siteed/gitguard/(.*)": "<rootDir>/src/$1",
       },
       testEnvironment: "node",
       extensionsToTreatAsEsm: [".ts"],
@@ -37,10 +36,6 @@ const config = {
             tsconfig: "tsconfig.test.json",
           },
         ],
-      },
-      moduleNameMapper: {
-        "@siteed/gitguard/(.*)": "<rootDir>/src/$1",
-        "^(\\.{1,2}/.*)\\.js$": "$1",
       },
       testEnvironment: "node",
       extensionsToTreatAsEsm: [".ts"],

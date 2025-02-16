@@ -1,0 +1,33 @@
+{
+  "search.exclude": {
+    "**/.yarn": true,
+    "**/.pnp.*": true,
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/build": true,
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/CVS": true,
+    "**/.rollup.cache/": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/dist": true,
+    "**/build": true,
+  },
+  "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"],
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "sonarlint.connectedMode.project": {
+    "connectionId": "siteed",
+    "projectKey": "deeeed_universe"
+  },
+  "jestrunner.jestCommand": "NODE_OPTIONS='--experimental-vm-modules --no-warnings' node_modules/.bin/jest --runInBand --detectOpenHandles",
+  "jestrunner.debugOptions": {
+    "env": {
+      "NODE_OPTIONS": "--experimental-vm-modules --no-warnings",
+    }
+  },
+  "java.configuration.updateBuildConfiguration": "disabled"
+}
