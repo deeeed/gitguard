@@ -1,3 +1,7 @@
+// NOTE: This test file contains deliberately crafted fake secrets and credentials
+// used for testing the SecurityService's secret detection capabilities.
+// None of these are real credentials.
+
 import {
   defaultConfig,
   setupBaseTestEnvironment,
