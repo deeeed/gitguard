@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 
+## [0.8.0] - 2025-02-16
+### Changed
+- feat: ready for single repo ([7b951ed](https://github.com/deeeed/gitguard/commit/7b951edb752828ecc190ced0b043bbf51de9b840))
+- disable legacy checks ([b0bed68](https://github.com/deeeed/gitguard/commit/b0bed684daca2fdc59ddfc390633539f94e0de00))
+- chore: disable pnp ([f2d0cf6](https://github.com/deeeed/gitguard/commit/f2d0cf6578ce0f8ddd019864e756d23ddd7eef54))
+- wip ([b397008](https://github.com/deeeed/gitguard/commit/b39700854f283b66c3e292c30a4063dcc62aa9c8))
+- wip ([fc22162](https://github.com/deeeed/gitguard/commit/fc2216218089611e1992d1afabc262f6faaae2f0))
+- wip ([677fe94](https://github.com/deeeed/gitguard/commit/677fe94c769a3e88798677c44908f91f88925b06))
+- move to new repo ([bd752b5](https://github.com/deeeed/gitguard/commit/bd752b58308f23218a64e023d744e348a2a300d0))
 ## [0.7.1] - 2025-02-14
 - Add --cwd option to release command to allow specifying a different working directory (#40) ([43229bd](https://github.com/deeeed/universe/commit/43229bd45361d629d81585179885deba1d891ade))
 ## [0.6.0] - 2024-11-19
@@ -46,7 +55,8 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - inititial version.
 
-[unreleased]: https://github.com/deeeed/universe/compare/gitguard@0.7.1...HEAD
+[unreleased]: https://github.com/deeeed/gitguard/compare/gitguard@0.8.0...HEAD
+[0.8.0]: https://github.com/deeeed/gitguard/compare/gitguard@0.7.1...gitguard@0.8.0
 [0.7.1]: https://github.com/deeeed/universe/compare/gitguard@0.7.0...gitguard@0.7.1
 [0.7.0]: https://github.com/deeeed/universe/compare/gitguard@0.6.0...gitguard@0.7.0
 [0.6.0]: https://github.com/deeeed/universe/compare/gitguard@0.5.1...gitguard@0.6.0
