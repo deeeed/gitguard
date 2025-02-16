@@ -5,10 +5,7 @@
   "description": "GitGuard is a tool that helps you enforce best practices in your Git commit messages.",
   "author": "Arthur Breton <abreton@siteed.net> (https://siteed.net/)",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/deeeed/gitguard"
-  },
+  "repository": "https://github.com/deeeed/gitguard",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/types/index.d.ts",
