@@ -17,6 +17,7 @@ import { BranchAnalysisController } from "./branch-analysis.controller.js";
 import { BranchPRController } from "./branch-pr.controller.js";
 import { BranchSecurityController } from "./branch-security.controller.js";
 import { BranchSplitController } from "./branch-split.controller.js";
+import { determineDefaultBranch } from "../../utils/git.util.js";
 
 interface AnalyzeParams {
   options: BranchCommandOptions;
@@ -100,13 +101,29 @@ async function initializeServices({
   logger.info("\n🚀 Initializing GitGuard services...");
 
   const config = await loadConfig({ configPath: options.configPath });
+  // First use basic config to check if we're in a git repo
   const gitConfig: GitConfig = {
     ...config.git,
     github: config.git.github,
-    baseBranch: config.git.baseBranch || "main",
     monorepoPatterns: config.git.monorepoPatterns || [],
   };
-
+  
+  // Only detect default branch if not explicitly set (or if it's null)
+  if (!config.git.baseBranch || config.git.baseBranch === null) {
+    // Use determineDefaultBranch to find the actual default branch
+    const defaultBranch = await determineDefaultBranch({
+      command: "rev-parse",
+      args: ["--abbrev-ref", "HEAD"],
+      logger
+    });
+    
+    // Set the baseBranch using the detected default
+    gitConfig.baseBranch = defaultBranch;
+    logger.debug("Auto-detected base branch:", gitConfig.baseBranch);
+  } else {
+    logger.debug("Using configured base branch:", gitConfig.baseBranch);
+  }
+  
   const git = new GitService({ gitConfig, logger });
   const github = new GitHubService({ config, logger, git });
   const security = new SecurityService({ config, logger });
@@ -267,7 +284,7 @@ async function initializeAnalysisContext({
 }: InitializeAnalysisContextParams): Promise<AnalysisContext> {
   const currentBranch = await services.git.getCurrentBranch();
   const branchToAnalyze = options.name ?? currentBranch;
-  const baseBranch = services.config.git.baseBranch;
+  const baseBranch = await services.git.getDefaultBranch();
 
   services.logger.debug("Branch analysis context:", {
     currentBranch,

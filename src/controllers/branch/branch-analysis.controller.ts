@@ -39,10 +39,13 @@ export class BranchAnalysisController {
   }): Promise<PRAnalysisResult> {
     this.logger.info(`\n🔍 Analyzing branch: ${params.branchToAnalyze}`);
 
-    // Prevent analysis on main branch
-    if (params.branchToAnalyze === this.git.config.baseBranch) {
+    // Get the default branch systematically 
+    const defaultBranch = await this.git.getDefaultBranch();
+    
+    // Prevent analysis on default branch
+    if (params.branchToAnalyze === defaultBranch) {
       throw new Error(
-        `Cannot analyze the base branch (${this.git.config.baseBranch}). Please create and switch to a feature branch first.`,
+        `Cannot analyze the base branch (${defaultBranch}). Please create and switch to a feature branch first.`,
       );
     }
 
@@ -55,42 +58,152 @@ export class BranchAnalysisController {
       );
     }
 
-    const baseBranch = this.git.config.baseBranch;
-
     // Get commits between branches first
     const commits = await this.git.getCommits({
-      from: baseBranch,
+      from: defaultBranch,
       to: params.branchToAnalyze,
     });
+    
+    this.logger.debug(`Found ${commits.length} commits between ${defaultBranch} and ${params.branchToAnalyze}`);
+    
+    // If no commits found, try an alternative approach
+    if (commits.length === 0) {
+      this.logger.warn(`No commits found between ${defaultBranch} and ${params.branchToAnalyze}. This could mean:
+      1. ${defaultBranch} branch doesn't exist
+      2. There are no differences between the branches
+      3. The branches have no common ancestry`);
+      
+      try {
+        // Just get the commits in the current branch to have some context
+        const branchCommits = await this.git.execGit({
+          command: "log",
+          args: [
+            "--format=%H%n%an%n%aI%n%B%n--END--",
+            params.branchToAnalyze,
+            "--max-count=10", // Limit to 10 commits
+            "--no-merges"
+          ],
+        });
+        
+        if (branchCommits.trim()) {
+          const parsedCommits = this.git["parser"].parseCommitLog({ log: branchCommits });
+          if (parsedCommits.length > 0) {
+            this.logger.info(`Using the last ${parsedCommits.length} commits from ${params.branchToAnalyze} instead`);
+            return this.createAnalysisResult({
+              branchToAnalyze: params.branchToAnalyze,
+              baseBranch: defaultBranch,
+              commits: parsedCommits,
+              files: [], // No file diff available
+              diff: "",
+            });
+          }
+        }
+      } catch (error) {
+        this.logger.debug("Failed to get branch commits as fallback:", error);
+      }
+    }
 
-    // Get diff between base branch and current branch
-    const diffStats = await this.git.execGit({
-      command: "diff",
-      args: [`origin/${baseBranch}...${params.branchToAnalyze}`, "--numstat"],
-    });
-
-    // Parse the diff stats into FileChange objects
-    const files: FileChange[] = diffStats
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => {
-        const [additions = "0", deletions = "0", path = ""] = line.split(/\s+/);
-        return {
-          path,
-          status: "modified",
-          additions: parseInt(additions, 10),
-          deletions: parseInt(deletions, 10),
-          ...FileUtil.getFileType({ path }),
-        };
+    // Get branch diff data
+    let files: FileChange[] = [];
+    let diff = "";
+    
+    try {
+      // First try to get the diff directly using the GitService's getDiff method
+      // This is safer as we've added branch existence checks there
+      diff = await this.git.getDiff({
+        type: "range",
+        from: defaultBranch,
+        to: params.branchToAnalyze,
+      });
+      
+      if (!diff) {
+        throw new Error("Empty diff result");
+      }
+      
+      // Get diff stats for file changes
+      const diffStats = await this.git.execGit({
+        command: "diff",
+        args: [`${defaultBranch}`, `${params.branchToAnalyze}`, "--numstat"],
+      }).catch(error => {
+        this.logger.debug("Failed to get numstat diff:", error);
+        return "";
       });
 
-    // Get the complete diff content
-    const diff = await this.git.execGit({
-      command: "diff",
-      args: [`origin/${baseBranch}...${params.branchToAnalyze}`],
-    });
+      // Parse the diff stats into FileChange objects if we have them
+      if (diffStats) {
+        files = diffStats
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => {
+            const [additions = "0", deletions = "0", path = ""] = line.split(/\s+/);
+            return {
+              path,
+              status: "modified",
+              additions: parseInt(additions, 10),
+              deletions: parseInt(deletions, 10),
+              ...FileUtil.getFileType({ path }),
+            };
+          });
+      }
+    } catch (error) {
+      this.logger.debug("Failed to get direct diff, trying with origin/:", error);
+      
+      // Fallback to using origin/ prefix if direct branch comparison failed
+      try {
+        const diffStats = await this.git.execGit({
+          command: "diff",
+          args: [`origin/${defaultBranch}...${params.branchToAnalyze}`, "--numstat"],
+        }).catch(error => {
+          this.logger.debug("Failed to get numstat diff with origin/:", error);
+          return "";
+        });
 
-    // Group files by directory using the commit service's scope detection
+        if (diffStats) {
+          files = diffStats
+            .split("\n")
+            .filter(Boolean)
+            .map((line) => {
+              const [additions = "0", deletions = "0", path = ""] = line.split(/\s+/);
+              return {
+                path,
+                status: "modified",
+                additions: parseInt(additions, 10),
+                deletions: parseInt(deletions, 10),
+                ...FileUtil.getFileType({ path }),
+              };
+            });
+          
+          // Get the complete diff content
+          diff = await this.git.execGit({
+            command: "diff",
+            args: [`origin/${defaultBranch}...${params.branchToAnalyze}`],
+          }).catch(() => "");
+        }
+      } catch (innerError) {
+        this.logger.debug("All diff methods failed:", innerError);
+      }
+    }
+
+    return this.createAnalysisResult({
+      branchToAnalyze: params.branchToAnalyze,
+      baseBranch: defaultBranch,
+      commits,
+      files,
+      diff,
+    });
+  }
+  
+  // Helper method to create a consistent analysis result
+  private createAnalysisResult(params: {
+    branchToAnalyze: string;
+    baseBranch: string;
+    commits: any[];
+    files: FileChange[];
+    diff: string;
+  }): PRAnalysisResult {
+    const { branchToAnalyze, baseBranch, commits, files, diff } = params;
+    
+    // Group files by directory
     const filesByDirectory = files.reduce(
       (acc, file) => {
         const directory = file.path.split("/")[0];
@@ -102,9 +215,9 @@ export class BranchAnalysisController {
       },
       {} as Record<string, string[]>,
     );
-
+    
     return {
-      branch: params.branchToAnalyze,
+      branch: branchToAnalyze,
       baseBranch,
       commits,
       stats: {

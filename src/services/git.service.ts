@@ -109,6 +109,7 @@ export class GitService extends BaseService {
   private readonly parser: CommitParser;
   private readonly gitConfig: RuntimeGitConfig;
   private readonly cwd: string;
+  private defaultBranch: string | null = null;
 
   constructor(params: ServiceOptions & { gitConfig: RuntimeGitConfig }) {
     super(params);
@@ -130,6 +131,44 @@ export class GitService extends BaseService {
     return this.gitConfig;
   }
 
+  /**
+   * Gets the default branch for the repository.
+   * 
+   * First checks the configured baseBranch from config,
+   * then uses determineDefaultBranch to detect it from the repo.
+   * Caches the result for efficiency.
+   */
+  public async getDefaultBranch(): Promise<string> {
+    // If we already determined it, return from cache
+    if (this.defaultBranch) {
+      return this.defaultBranch;
+    }
+    
+    // If specified in config, use that value
+    if (this.gitConfig.baseBranch) {
+      this.defaultBranch = this.gitConfig.baseBranch;
+      return this.defaultBranch;
+    }
+    
+    // Otherwise detect it
+    try {
+      this.defaultBranch = await determineDefaultBranch({
+        command: "rev-parse",
+        args: ["--abbrev-ref", "HEAD"],
+        cwd: this.cwd,
+        logger: this.logger,
+      });
+      
+      this.logger.debug(`Detected default branch: ${this.defaultBranch}`);
+      return this.defaultBranch;
+    } catch (error) {
+      this.logger.error("Failed to determine default branch:", error);
+      // Fallback to main as the default
+      this.defaultBranch = "main";
+      return this.defaultBranch;
+    }
+  }
+
   async getCurrentBranch(): Promise<string> {
     try {
       this.logger.debug("Getting current branch");
@@ -143,12 +182,7 @@ export class GitService extends BaseService {
 
       if (!hasCommits) {
         // Use determineDefaultBranch with cwd
-        const defaultBranch = await determineDefaultBranch({
-          command: "rev-parse",
-          args: ["--abbrev-ref", "HEAD"],
-          cwd: this.cwd,
-          logger: this.logger,
-        });
+        const defaultBranch = await this.getDefaultBranch();
         this.logger.debug(
           `No commits yet, returning default branch: ${defaultBranch}`,
         );
@@ -175,6 +209,102 @@ export class GitService extends BaseService {
   }): Promise<CommitInfo[]> {
     try {
       this.logger.debug(`Getting commits from ${params.from} to ${params.to}`);
+      
+      // Check if both branches exist
+      const checkBranch = async (branch: string): Promise<boolean> => {
+        try {
+          await this.execGit({
+            command: "rev-parse",
+            args: ["--verify", `refs/heads/${branch}`],
+            cwd: this.cwd,
+          });
+          return true;
+        } catch (error) {
+          this.logger.debug(`Branch ${branch} does not exist or cannot be found`);
+          return false;
+        }
+      };
+      
+      const fromExists = await checkBranch(params.from);
+      const toExists = await checkBranch(params.to);
+      
+      // Special handling for fork scenarios
+      if (!fromExists && toExists) {
+        this.logger.debug(`Base branch '${params.from}' not found, attempting to determine fork point...`);
+        
+        try {
+          // Try to find the common ancestor with origin/main or origin/master
+          for (const remoteBranch of [`origin/${params.from}`, 'origin/main', 'origin/master']) {
+            try {
+              const mergeBase = await this.execGit({
+                command: "merge-base",
+                args: [remoteBranch, params.to],
+                cwd: this.cwd,
+              });
+              
+              if (mergeBase.trim()) {
+                this.logger.info(`Found merge base with ${remoteBranch}, using it as fork point`);
+                
+                // Get commits between the merge base and the current branch
+                const output = await this.execGit({
+                  command: "log",
+                  args: [
+                    "--format=%H%n%an%n%aI%n%B%n--END--",
+                    `${mergeBase.trim()}..${params.to}`,
+                    "--no-merges",
+                    "--first-parent",
+                  ],
+                  cwd: this.cwd,
+                });
+                
+                const commits = this.parser.parseCommitLog({ log: output });
+                this.logger.debug(`Found ${commits.length} commits since fork point`);
+                return this.attachFileChanges({ commits });
+              }
+            } catch (err) {
+              this.logger.debug(`No merge base found with ${remoteBranch}`);
+            }
+          }
+        } catch (error) {
+          this.logger.debug("Failed to find fork point:", error);
+        }
+        
+        // Fall back to just showing commits in the current branch
+        this.logger.debug(`Falling back to getting all commits in ${params.to}`);
+        const output = await this.execGit({
+          command: "log",
+          args: [
+            "--format=%H%n%an%n%aI%n%B%n--END--",
+            params.to,
+            "--max-count=50", // Limit to recent commits
+            "--no-merges",
+            "--first-parent",
+          ],
+          cwd: this.cwd,
+        });
+        
+        const commits = this.parser.parseCommitLog({ log: output });
+        this.logger.debug(`Found ${commits.length} commits in current branch (limited to 50)`);
+        return this.attachFileChanges({ commits });
+      }
+      
+      if (!fromExists || !toExists) {
+        this.logger.debug(`One or both branches don't exist: from(${params.from}): ${fromExists}, to(${params.to}): ${toExists}`);
+        return [];
+      }
+      
+      // Check if branches have a common ancestor
+      try {
+        await this.execGit({
+          command: "merge-base",
+          args: [params.from, params.to],
+          cwd: this.cwd,
+        });
+      } catch (error) {
+        this.logger.debug(`No common ancestor between ${params.from} and ${params.to}`);
+        return [];
+      }
+      
       const output = await this.execGit({
         command: "log",
         args: [
@@ -471,10 +601,36 @@ export class GitService extends BaseService {
         });
       }
 
-      if (params.type === "range" && params.from && params.to) {
+      if (params.type === "range") {
+        const from = params.from || await this.getDefaultBranch();
+        const to = params.to || await this.getCurrentBranch();
+        
+        // Check if both branches/revisions exist before diffing
+        const checkRevision = async (revision: string): Promise<boolean> => {
+          try {
+            await this.execGit({
+              command: "rev-parse",
+              args: ["--verify", revision],
+              cwd: this.cwd,
+            });
+            return true;
+          } catch (error) {
+            this.logger.debug(`Revision '${revision}' does not exist or cannot be found`);
+            return false;
+          }
+        };
+        
+        const fromExists = await checkRevision(from);
+        const toExists = await checkRevision(to);
+        
+        if (!fromExists || !toExists) {
+          this.logger.warn(`Cannot diff: ${!fromExists ? `'${from}' not found` : ''} ${!toExists ? `'${to}' not found` : ''}`);
+          return "";
+        }
+        
         return await this.execGit({
           command: "diff",
-          args: [params.from, params.to],
+          args: [from, to],
           cwd: this.cwd,
         });
       }
@@ -696,7 +852,7 @@ export class GitService extends BaseService {
   async getDiffForBranch(params: { branch: string }): Promise<string> {
     try {
       this.logger.debug(`Getting diff for branch ${params.branch}`);
-      const baseBranch = this.gitConfig.baseBranch || "main";
+      const baseBranch = await this.getDefaultBranch();
 
       const output = await this.execGit({
         command: "diff",
