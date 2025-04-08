@@ -151,7 +151,7 @@ export async function getConfigStatus(): Promise<ConfigStatus> {
 export function getDefaultConfig(): Config {
   return {
     git: {
-      baseBranch: "main",
+      baseBranch: null as unknown as string,
       monorepoPatterns: ["packages/", "apps/", "libs/"],
       ignorePatterns: ["*.lock", "dist/*"],
     },
@@ -280,9 +280,9 @@ interface ValidateConfigParams {
 }
 
 export function validateConfig({ config }: ValidateConfigParams): void {
-  // Required fields validation
-  if (!config.git?.baseBranch) {
-    throw new Error("Configuration must include git.baseBranch");
+  // Required fields validation - allow null as it indicates we should detect it dynamically
+  if (config.git?.baseBranch === undefined) {
+    throw new Error("Configuration must include git.baseBranch (or null for auto-detection)");
   }
 
   validateAIConfig({ config });
