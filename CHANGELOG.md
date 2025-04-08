@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 
+## [0.9.0] - 2025-04-08
+### Changed
+- chore: remove deprecated dependency '@siteed/publisher' from package.json ([e839c5f](https://github.com/deeeed/gitguard/commit/e839c5f3b4d76d469328cc075a19c7b5056ac3c3))
+- fix: update markdown formatting in PR template to specify 'raw markdown' ([78500f8](https://github.com/deeeed/gitguard/commit/78500f863a710cf1af6cd4ad84856404881f9937))
+- feat: implement dynamic default branch detection and enhance branch analysis logic ([51c4070](https://github.com/deeeed/gitguard/commit/51c40703ae01061c5494d9d9acd8dc6d736e9410))
+- feat: add general and TypeScript coding guidelines ([665a2fd](https://github.com/deeeed/gitguard/commit/665a2fd278c4c674028807194bdf0e76851360e3))
+- chore(release): release gitguard@0.8.0 ([0211ddb](https://github.com/deeeed/gitguard/commit/0211ddb77628089e3a86af52574b4d0530a4c67e))
 ## [0.8.0] - 2025-02-16
 ### Changed
 - feat: ready for single repo ([7b951ed](https://github.com/deeeed/gitguard/commit/7b951edb752828ecc190ced0b043bbf51de9b840))
@@ -55,7 +62,8 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - inititial version.
 
-[unreleased]: https://github.com/deeeed/gitguard/compare/gitguard@0.8.0...HEAD
+[unreleased]: https://github.com/deeeed/gitguard/compare/gitguard@0.9.0...HEAD
+[0.9.0]: https://github.com/deeeed/gitguard/compare/gitguard@0.8.0...gitguard@0.9.0
 [0.8.0]: https://github.com/deeeed/gitguard/compare/gitguard@0.7.1...gitguard@0.8.0
 [0.7.1]: https://github.com/deeeed/universe/compare/gitguard@0.7.0...gitguard@0.7.1
 [0.7.0]: https://github.com/deeeed/universe/compare/gitguard@0.6.0...gitguard@0.7.0
