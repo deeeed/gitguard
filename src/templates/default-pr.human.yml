@@ -37,7 +37,7 @@ template: |
      - Migration steps (if needed)
   3. Any testing instructions or special considerations
 
-  Format your response in markdown with clear headings and sections, making it ready to copy directly into the PR description. Include:
+  Format your response in in raw markdown with clear headings and sections, making it ready to copy directly into the PR description. Include:
 
   # Title
   [Your suggested title]
