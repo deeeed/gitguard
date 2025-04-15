@@ -21,6 +21,7 @@ import { determineDefaultBranch } from "../../utils/git.util.js";
 
 interface AnalyzeParams {
   options: BranchCommandOptions;
+  subCommandOptions?: Partial<BranchCommandOptions>;
 }
 
 interface ServicesContext {
@@ -45,6 +46,7 @@ interface ControllersContext {
 
 interface InitializeServicesParams {
   options: BranchCommandOptions;
+  subCommandOptions?: Partial<BranchCommandOptions>;
 }
 
 interface InitializeControllersParams {
@@ -93,35 +95,38 @@ interface ProcessAIWithGitHubParams {
 
 async function initializeServices({
   options,
+  subCommandOptions = {},
 }: InitializeServicesParams): Promise<ServicesContext> {
-  const isDebug = options.debug ?? process.env.GITGUARD_DEBUG === "true";
+  
+  const mergedOptions = { ...options, ...subCommandOptions };
+  
+  const isDebug = mergedOptions.debug ?? process.env.GITGUARD_DEBUG === "true";
   const logger = new LoggerService({ debug: isDebug });
   const reporter = new ReporterService({ logger });
 
   logger.info("\n🚀 Initializing GitGuard services...");
 
-  const config = await loadConfig({ configPath: options.configPath });
-  // First use basic config to check if we're in a git repo
+  const config = await loadConfig({ configPath: mergedOptions.configPath });
   const gitConfig: GitConfig = {
     ...config.git,
     github: config.git.github,
     monorepoPatterns: config.git.monorepoPatterns || [],
   };
   
-  // Only detect default branch if not explicitly set (or if it's null)
-  if (!config.git.baseBranch || config.git.baseBranch === null) {
-    // Use determineDefaultBranch to find the actual default branch
+  if (mergedOptions.base) {
+    gitConfig.baseBranch = mergedOptions.base;
+    logger.debug(`Using command-line base branch: ${gitConfig.baseBranch}`);
+  } else if (!config.git.baseBranch || config.git.baseBranch === null) {
     const defaultBranch = await determineDefaultBranch({
       command: "rev-parse",
       args: ["--abbrev-ref", "HEAD"],
       logger
     });
     
-    // Set the baseBranch using the detected default
     gitConfig.baseBranch = defaultBranch;
     logger.debug("Auto-detected base branch:", gitConfig.baseBranch);
   } else {
-    logger.debug("Using configured base branch:", gitConfig.baseBranch);
+    logger.info("Using configured base branch:", gitConfig.baseBranch);
   }
   
   const git = new GitService({ gitConfig, logger });
@@ -129,9 +134,9 @@ async function initializeServices({
   const security = new SecurityService({ config, logger });
 
   const isAIEnabled =
-    options.ai === undefined
+    mergedOptions.ai === undefined
       ? (config.ai?.enabled ?? false)
-      : (options.ai ?? true);
+      : (mergedOptions.ai ?? true);
   const ai = initializeAI({ config, logger, isAIRequested: isAIEnabled });
 
   const prService = new PRService({
@@ -208,15 +213,18 @@ async function initializeControllers({
 
 export async function analyzeBranch({
   options,
+  subCommandOptions,
 }: AnalyzeParams): Promise<PRAnalysisResult> {
-  const services = await initializeServices({ options });
+  const services = await initializeServices({ options, subCommandOptions });
   const { logger, reporter, config } = services;
+  
+  const combinedOptions = { ...options, ...subCommandOptions } as BranchCommandOptions;
 
   try {
-    logger.debug("Analysis options:", {
-      full: options,
-      split: options.split,
-      splitType: typeof options.split,
+    logger.debug("Analysis combined options:", {
+      full: combinedOptions,
+      split: combinedOptions.split,
+      splitType: typeof combinedOptions.split,
     });
 
     logger.info("\n🎯 Starting branch analysis...");
@@ -224,7 +232,7 @@ export async function analyzeBranch({
 
     const analysisContext = await initializeAnalysisContext({
       services,
-      options,
+      options: combinedOptions,
     });
     let analysisResult = await performInitialAnalysis({
       controllers,
@@ -232,13 +240,11 @@ export async function analyzeBranch({
     });
 
     logger.debug(
-      `Security enabled: ${config?.security?.enabled}, skipSecurity: ${options.skipSecurity}`,
+      `Security enabled: ${config?.security?.enabled}, skipSecurity: ${combinedOptions.skipSecurity}`,
     );
 
-    // Default to skip security if undefined on branch
-    const skipSecurity = options.skipSecurity ?? true;
+    const skipSecurity = combinedOptions.skipSecurity ?? true;
     if (config?.security?.enabled && !skipSecurity) {
-      // Security checks
       const securityResult = await handleSecurityChecks({
         controllers,
         analysisResult,
@@ -246,24 +252,22 @@ export async function analyzeBranch({
       controllers.securityController.displaySecuritySummary(securityResult);
     }
 
-    // Generate report
     reporter.generateReport({
       result: analysisResult,
-      options: { detailed: options.detailed ?? false },
+      options: { detailed: combinedOptions.detailed ?? false },
     });
 
-    // Handle AI processing if enabled
     if (services.isAIEnabled) {
       analysisResult = await processAIFeatures({
         controllers,
         analysisResult,
-        options,
+        options: combinedOptions,
         logger,
       });
-    } else if (options.createPR ?? options.draft) {
+    } else if (combinedOptions.createPR ?? combinedOptions.draft) {
       analysisResult = await handlePRCreation({
         controllers,
-        options,
+        options: combinedOptions,
         analysisResult,
         analysisContext,
       });
