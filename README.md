@@ -1,3 +1,9 @@
+> ⚠️ **DEPRECATED** — GitGuard is no longer maintained.
+> AI coding agents (Claude Code, Cursor, OpenClaw) now handle everything GitGuard did — pre-push validation, PR quality checks, scope detection — more effectively and with zero setup.
+> This repo is archived for reference only.
+
+---
+
 # GitGuard
 
 <div align="center">
